@@ -13,6 +13,7 @@ import (
 
 var (
 	tektonAPI     = os.Getenv("TEKTON_API")
+	tektonNamespace = os.Getenv("TEKTON_NAMESPACE")
 	eventID       = os.Getenv("EVENT_ID")
 	tkn           = os.Getenv("TEKTON_JWT")
 	containerLogs []*ContainerLogs
@@ -26,7 +27,7 @@ func getRunForTriggerID(id string) (*PipelineRuns, error) {
 	}
 	tr := &PipelineRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/tekton-pipelines/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
 	if err != nil {
 		return tr, err
 	}
@@ -59,7 +60,7 @@ func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
 	}
 	tr := &TaskRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/tekton-pipelines/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
 	if err != nil {
 		return tr, err
 	}
@@ -138,7 +139,7 @@ func (ps PodSteps) Logs() error {
 
 func getPodLogs(pod, container string) (string, error) {
 	var logs string
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/api/v1/namespaces/tekton-pipelines/pods/"+pod+"/log?container="+container, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/proxy/api/v1/namespaces/"+tektonNamespace+"/pods/"+pod+"/log?container="+container, nil)
 	if err != nil {
 		return logs, err
 	}
@@ -206,6 +207,9 @@ func logs(pr PipelineRuns) {
 func init() {
 	if tektonAPI == "" {
 		tektonAPI = "http://tekton-dashboard.tekton-pipelines:9097"
+	}
+	if tektonNamespace == "" {
+		tektonNamespace = "tekton-pipelines"
 	}
 }
 
