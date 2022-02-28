@@ -12,13 +12,13 @@ import (
 )
 
 var (
-	tektonAPI     = os.Getenv("TEKTON_API")
+	tektonAPI       = os.Getenv("TEKTON_API")
 	tektonNamespace = os.Getenv("TEKTON_NAMESPACE")
-	eventID       = os.Getenv("EVENT_ID")
-	tkn           = os.Getenv("TEKTON_JWT")
-	containerLogs []*ContainerLogs
-	pipelineRuns  *PipelineRuns
-	taskRuns      *TaskRuns
+	eventID         = os.Getenv("EVENT_ID")
+	tkn             = os.Getenv("TEKTON_JWT")
+	containerLogs   []*ContainerLogs
+	pipelineRuns    *PipelineRuns
+	taskRuns        *TaskRuns
 )
 
 func getRunForTriggerID(id string) (*PipelineRuns, error) {
@@ -31,9 +31,7 @@ func getRunForTriggerID(id string) (*PipelineRuns, error) {
 	if err != nil {
 		return tr, err
 	}
-	if tkn != "" {
-		r.Header.Set("x-mesh-sso", tkn)
-	}
+	setAuthHeaders(r)
 	res, rerr := c.Do(r)
 	if rerr != nil {
 		return tr, rerr
@@ -64,9 +62,7 @@ func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
 	if err != nil {
 		return tr, err
 	}
-	if tkn != "" {
-		r.Header.Set("x-mesh-sso", tkn)
-	}
+	setAuthHeaders(r)
 	res, rerr := c.Do(r)
 	if rerr != nil {
 		return tr, rerr
@@ -85,6 +81,13 @@ func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
 	}
 	taskRuns = tr
 	return tr, nil
+}
+
+func setAuthHeaders(r *http.Request) {
+	if tkn != "" {
+		r.Header.Set("x-mesh-sso", tkn)
+		r.Header.Set("Authorization", "Bearer "+tkn)
+	}
 }
 
 func (tr *TaskRuns) PodSteps() ([]PodSteps, error) {
@@ -143,9 +146,7 @@ func getPodLogs(pod, container string) (string, error) {
 	if err != nil {
 		return logs, err
 	}
-	if tkn != "" {
-		r.Header.Set("x-mesh-sso", tkn)
-	}
+	setAuthHeaders(r)
 	c := &http.Client{}
 	res, rerr := c.Do(r)
 	if rerr != nil {
