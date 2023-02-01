@@ -27,7 +27,7 @@ func getRunForTriggerID(id string) (*PipelineRuns, error) {
 	}
 	tr := &PipelineRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
 	if err != nil {
 		return tr, err
 	}
@@ -58,7 +58,7 @@ func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
 	}
 	tr := &TaskRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
 	if err != nil {
 		return tr, err
 	}
@@ -142,7 +142,7 @@ func (ps PodSteps) Logs() error {
 
 func getPodLogs(pod, container string) (string, error) {
 	var logs string
-	r, err := http.NewRequest("GET", tektonAPI+"/proxy/api/v1/namespaces/"+tektonNamespace+"/pods/"+pod+"/log?container="+container, nil)
+	r, err := http.NewRequest("GET", tektonAPI+"/api/v1/namespaces/"+tektonNamespace+"/pods/"+pod+"/log?container="+container, nil)
 	if err != nil {
 		return logs, err
 	}
