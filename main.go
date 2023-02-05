@@ -4,27 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
-	tektonAPI       = os.Getenv("TEKTON_API")
-	tektonNamespace = os.Getenv("TEKTON_NAMESPACE")
-	eventID         = os.Getenv("EVENT_ID")
-	tkn             = os.Getenv("TEKTON_JWT")
+	tektonAPI                     = os.Getenv("TEKTON_API")
+	tektonNamespace               = os.Getenv("TEKTON_NAMESPACE")
+	eventID                       = os.Getenv("EVENT_ID")
+	tkn                           = os.Getenv("TEKTON_JWT")
+	retryCount      int           = 100
+	retryInterval   time.Duration = time.Second
 	containerLogs   []*ContainerLogs
 	pipelineRuns    *PipelineRuns
 	taskRuns        *TaskRuns
 )
 
 func getRunForTriggerID(id string) (*PipelineRuns, error) {
-	if pipelineRuns != nil {
-		//return pipelineRuns, nil
-	}
 	tr := &PipelineRuns{}
 	c := &http.Client{}
 	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
@@ -53,9 +53,6 @@ func getRunForTriggerID(id string) (*PipelineRuns, error) {
 }
 
 func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
-	if taskRuns != nil {
-		//return taskRuns, nil
-	}
 	tr := &TaskRuns{}
 	c := &http.Client{}
 	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
@@ -186,7 +183,7 @@ func runComplete(pr *PipelineRuns) bool {
 func logs(pr PipelineRuns) {
 	if len(pr.Items) < 1 {
 		log.Println("no PipelineRun Items")
-		os.Exit(1)
+		return
 	}
 	tr, err := getTaskRunsForPipelineRun(pr.Items[0].Metadata.Name)
 	if err != nil {
@@ -212,23 +209,42 @@ func init() {
 	if tektonNamespace == "" {
 		tektonNamespace = "tekton-pipelines"
 	}
+	ll, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
+	if err != nil {
+		ll = log.InfoLevel
+	}
+	log.SetLevel(ll)
 }
 
 func main() {
+	l := log.WithFields(log.Fields{
+		"app": "tknwatch",
+	})
+	l.Debug("starting")
 	if eventID == "" && len(os.Args) <= 1 {
-		fmt.Println("event ID required")
-		os.Exit(1)
+		l.Fatal("no eventID provided")
 	} else if eventID == "" {
 		eventID = os.Args[1]
+		l = l.WithField("eventID", eventID)
 	}
 	var c bool
+	var retries int
 	for !c {
 		pr, err := getRunForTriggerID(eventID)
 		if err != nil {
-			log.Printf("getRunForTriggerID(%s) error: %v\n", eventID, err)
+			l.WithError(err).Error("getRunForTriggerID error")
 		}
-		c = runComplete(pr)
+		if len(pr.Items) < 1 {
+			l.Info("no PipelineRun Items, waiting...")
+			retries++
+			if retries > retryCount {
+				l.Fatal("retry count exceeded")
+			}
+			time.Sleep(retryInterval)
+			continue
+		}
 		logs(*pr)
+		c = runComplete(pr)
 		if !c {
 			time.Sleep(time.Second * 5)
 		}
