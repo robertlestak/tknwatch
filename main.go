@@ -15,6 +15,8 @@ import (
 var (
 	tektonAPI                     = os.Getenv("TEKTON_API")
 	tektonNamespace               = os.Getenv("TEKTON_NAMESPACE")
+	tektonAPIsStr                 = os.Getenv("TEKTON_APIS")
+	tektonAPIs                    = strings.Split(tektonAPIsStr, ",")
 	eventID                       = os.Getenv("EVENT_ID")
 	tkn                           = os.Getenv("TEKTON_JWT")
 	retryCount      int           = 100
@@ -24,10 +26,25 @@ var (
 	taskRuns        *TaskRuns
 )
 
-func getRunForTriggerID(id string) (*PipelineRuns, error) {
+func cleanApisSlice() {
+	var apis []string
+	for _, v := range tektonAPIs {
+		if strings.TrimSpace(v) != "" {
+			apis = append(apis, v)
+		}
+	}
+	tektonAPIs = apis
+	if len(tektonAPIs) > 0 {
+		// this will be set by getRunForTriggerIDFromAPIs
+		// when we find a pipeline run
+		tektonAPI = ""
+	}
+}
+
+func getRunForTriggerID(api, id string) (*PipelineRuns, error) {
 	tr := &PipelineRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
+	r, err := http.NewRequest("GET", api+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
 	if err != nil {
 		return tr, err
 	}
@@ -50,6 +67,24 @@ func getRunForTriggerID(id string) (*PipelineRuns, error) {
 	}
 	pipelineRuns = tr
 	return tr, nil
+}
+
+func getRunForTriggerIDFromAPIs(id string) (*PipelineRuns, error) {
+	if len(tektonAPIs) == 0 && tektonAPI != "" {
+		return getRunForTriggerID(tektonAPI, id)
+	}
+	for _, v := range tektonAPIs {
+		tr, err := getRunForTriggerID(v, id)
+		if err != nil {
+			log.Errorf("error getting pipeline run from api %v: %v", v, err)
+			continue
+		}
+		if len(tr.Items) > 0 {
+			tektonAPI = v
+			return tr, nil
+		}
+	}
+	return &PipelineRuns{}, fmt.Errorf("no pipeline run found for trigger id %v", id)
 }
 
 func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
@@ -214,6 +249,7 @@ func init() {
 		ll = log.InfoLevel
 	}
 	log.SetLevel(ll)
+	cleanApisSlice()
 }
 
 func main() {
@@ -230,7 +266,7 @@ func main() {
 	var c bool
 	var retries int
 	for !c {
-		pr, err := getRunForTriggerID(eventID)
+		pr, err := getRunForTriggerIDFromAPIs(eventID)
 		if err != nil {
 			l.WithError(err).Error("getRunForTriggerID error")
 		}
