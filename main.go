@@ -42,76 +42,112 @@ func cleanApisSlice() {
 }
 
 func getRunForTriggerID(api, id string) (*PipelineRuns, error) {
+	l := log.WithFields(log.Fields{
+		"api":       api,
+		"triggerID": id,
+	})
+	l.Debugf("getting pipeline run for trigger id %v", id)
 	tr := &PipelineRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", api+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D"+id, nil)
+	u := api + "/apis/tekton.dev/v1beta1/namespaces/" + tektonNamespace + "/pipelineruns/?labelSelector=triggers.tekton.dev%2Ftriggers-eventid%3D" + id
+	l.WithField("url", u).Debug("getting pipeline run from api")
+	r, err := http.NewRequest("GET", u, nil)
 	if err != nil {
+		l.WithError(err).Error("error creating request")
 		return tr, err
 	}
 	setAuthHeaders(r)
 	res, rerr := c.Do(r)
 	if rerr != nil {
+		l.WithError(rerr).Error("error getting pipeline run")
 		return tr, rerr
 	}
 	defer res.Body.Close()
 	if res.StatusCode > 202 {
+		l.WithField("status", res.Status).Error("error getting pipeline run")
 		return tr, fmt.Errorf("res.Status: %v", res.Status)
 	}
 	bd, berr := ioutil.ReadAll(res.Body)
 	if berr != nil {
+		l.WithError(berr).Error("error reading response body")
 		return tr, berr
 	}
 	jerr := json.Unmarshal(bd, &tr)
 	if jerr != nil {
+		l.WithError(jerr).Error("error unmarshalling response body")
 		return tr, jerr
 	}
+	l.WithField("count", len(tr.Items)).Debug("got pipeline run")
 	pipelineRuns = tr
 	return tr, nil
 }
 
 func getRunForTriggerIDFromAPIs(id string) (*PipelineRuns, error) {
+	l := log.WithFields(log.Fields{
+		"triggerID": id,
+	})
+	l.Debugf("getting pipeline run for trigger id %v", id)
 	if len(tektonAPIs) == 0 && tektonAPI != "" {
+		l.WithField("api", tektonAPI).Debug("getting pipeline run from api")
 		return getRunForTriggerID(tektonAPI, id)
 	}
 	for _, v := range tektonAPIs {
+		l.WithField("api", v).Debug("getting pipeline run from api")
 		tr, err := getRunForTriggerID(v, id)
 		if err != nil {
-			log.Errorf("error getting pipeline run from api %v: %v", v, err)
+			l.WithError(err).Error("error getting pipeline run")
 			continue
 		}
 		if len(tr.Items) > 0 {
+			l.WithField("api", v).Debug("found pipeline run")
 			tektonAPI = v
 			return tr, nil
+		} else {
+			l.WithField("api", v).Debug("no pipeline run found")
 		}
 	}
+	l.Debug("no pipeline run found")
 	return &PipelineRuns{}, fmt.Errorf("no pipeline run found for trigger id %v", id)
 }
 
 func getTaskRunsForPipelineRun(id string) (*TaskRuns, error) {
+	l := log.WithFields(log.Fields{
+		"pipelineRun": id,
+	})
+	l.Debugf("getting task runs for pipeline run %v", id)
 	tr := &TaskRuns{}
 	c := &http.Client{}
-	r, err := http.NewRequest("GET", tektonAPI+"/apis/tekton.dev/v1beta1/namespaces/"+tektonNamespace+"/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D"+id, nil)
+	u := tektonAPI + "/apis/tekton.dev/v1beta1/namespaces/" + tektonNamespace + "/taskruns/?labelSelector=tekton.dev%2FpipelineRun%3D" + id
+	l.WithField("url", u).Debug("getting task runs from api")
+	r, err := http.NewRequest("GET", u, nil)
 	if err != nil {
+		l.WithError(err).Error("error creating request")
 		return tr, err
 	}
 	setAuthHeaders(r)
 	res, rerr := c.Do(r)
 	if rerr != nil {
+		l.WithError(rerr).Error("error getting task runs")
 		return tr, rerr
 	}
 	defer res.Body.Close()
 	if res.StatusCode > 202 {
+		l.WithField("status", res.Status).Error("error getting task runs")
 		return tr, fmt.Errorf("res.Status: %v", res.Status)
 	}
+	l.WithField("status", res.Status).Debug("got task runs")
 	bd, berr := ioutil.ReadAll(res.Body)
 	if berr != nil {
+		l.WithError(berr).Error("error reading response body")
 		return tr, berr
 	}
 	jerr := json.Unmarshal(bd, &tr)
 	if jerr != nil {
+		l.WithError(jerr).Error("error unmarshalling response body")
 		return tr, jerr
 	}
 	taskRuns = tr
+	l.WithField("count", len(tr.Items)).Debug("got task runs")
 	return tr, nil
 }
 
@@ -261,8 +297,9 @@ func main() {
 		l.Fatal("no eventID provided")
 	} else if eventID == "" {
 		eventID = os.Args[1]
-		l = l.WithField("eventID", eventID)
 	}
+	l = l.WithField("eventID", eventID)
+	l.Debug("eventID")
 	var c bool
 	var retries int
 	for !c {
