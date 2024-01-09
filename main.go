@@ -295,7 +295,7 @@ func main() {
 	l.Debug("starting")
 	if eventID == "" && len(os.Args) <= 1 {
 		l.Fatal("no eventID provided")
-	} else if eventID == "" {
+	} else if eventID != "" {
 		eventID = os.Args[1]
 	}
 	l = l.WithField("eventID", eventID)
